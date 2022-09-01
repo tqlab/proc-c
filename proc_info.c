@@ -121,7 +121,7 @@ void get_proc_info(proc_t *p)
     unsigned int cpu_count = process_ptr.cpu_count;
 
     uint64_t global_diff = 0;
-    for (int i = 0; i < cpu_count; ++i)
+    for (unsigned int i = 0; i < cpu_count; ++i)
     {
         for (size_t j = 0; j < CPU_STATE_MAX; ++j)
         {
