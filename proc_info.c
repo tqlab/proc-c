@@ -186,7 +186,7 @@ void get_proc_info(proc_t *p)
         fprintf(stderr, "Failed to get VM statistics.");
         return;
     }
-    p->percent_mem = vmstat.free_count / (double)(vmstat.wire_count + vmstat.active_count + vmstat.inactive_count + vmstat.free_count) * 100;
+    p->percent_mem = (1 - vmstat.free_count / (double)(vmstat.wire_count + vmstat.active_count + vmstat.inactive_count + vmstat.free_count)) * 100;
     p->percent_cpu_user = cpu_states[0] / 100.0;
     p->percent_cpu_system = cpu_states[1] / 100.0;
     p->percent_cpu = p->percent_cpu_user + p->percent_cpu_system;
