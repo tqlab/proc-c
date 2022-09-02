@@ -178,15 +178,21 @@ void get_proc_info(proc_t *p)
         return;
     }
 
-    mach_msg_type_number_t count = HOST_VM_INFO_COUNT;
+    mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
 
-    vm_statistics_data_t vmstat;
-    if (host_statistics(libtop_port, HOST_VM_INFO, (host_info_t)&vmstat, &count) != KERN_SUCCESS)
+    vm_statistics64_data_t vmstat;
+    if (host_statistics64(libtop_port, HOST_VM_INFO64, (host_info64_t)&vmstat, &count) != KERN_SUCCESS)
     {
         fprintf(stderr, "Failed to get VM statistics.");
         return;
     }
-    p->percent_mem = (1 - vmstat.free_count / (double)(vmstat.wire_count + vmstat.active_count + vmstat.inactive_count + vmstat.free_count)) * 100;
+    natural_t app_mem = vmstat.internal_page_count - vmstat.purgeable_count;
+    natural_t used_mem = app_mem + vmstat.wire_count + vmstat.compressor_page_count;
+    
+    natural_t total_mem = vmstat.free_count + vmstat.wire_count + vmstat.active_count + vmstat.inactive_count + vmstat.speculative_count +
+                          vmstat.throttled_count + vmstat.compressor_page_count;
+
+    p->percent_mem = used_mem / (double)(total_mem)*100;
     p->percent_cpu_user = cpu_states[0] / 100.0;
     p->percent_cpu_system = cpu_states[1] / 100.0;
     p->percent_cpu = p->percent_cpu_user + p->percent_cpu_system;
