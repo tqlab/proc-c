@@ -336,7 +336,7 @@ static result_t read_stat(cpu_t *cpu)
             }
         }
     }
-
+    fclose(file);
     return SUCCESS;
 
 error:
