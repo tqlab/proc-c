@@ -188,7 +188,7 @@ void get_proc_info(proc_t *p)
     }
     natural_t app_mem = vmstat.internal_page_count - vmstat.purgeable_count;
     natural_t used_mem = app_mem + vmstat.wire_count + vmstat.compressor_page_count;
-    
+
     natural_t total_mem = vmstat.free_count + vmstat.wire_count + vmstat.active_count + vmstat.inactive_count + vmstat.speculative_count +
                           vmstat.throttled_count + vmstat.compressor_page_count;
 
@@ -255,6 +255,13 @@ typedef struct
     int64_t priority;
     int64_t nice;
 } process_t;
+
+typedef struct
+{
+    unsigned long total;
+    unsigned long free;
+    unsigned long available;
+} mem_info_t;
 
 typedef struct
 {
@@ -340,7 +347,7 @@ error:
 static result_t parse_stat(char *line, process_t *proc)
 {
     char *tmp;
-    int len;
+    uint32_t len;
     int n;
     line = strchr(line, '(') + 1;
     tmp = strchr(line, ')');
@@ -417,11 +424,6 @@ static uint64_t get_cpu_system(cputime_t *time)
     return time->system + time->irq + time->softirq;
 }
 
-static uint64_t get_cpu_idle(cputime_t *time)
-{
-    return time->iowait + time->idle;
-}
-
 static void get_cpu_diff(cputime_t *before, cputime_t *after, cputime_t *diff)
 {
     uint64_t tmp;
@@ -446,22 +448,44 @@ static void get_cpu_diff(cputime_t *before, cputime_t *after, cputime_t *diff)
 #undef DIFF
 }
 
-static unsigned long long get_memory_total()
+static void get_memory_info(mem_info_t *o)
 {
-    struct sysinfo info;
-    sysinfo(&info);
-    long long total_mem = info.totalram;
-    // total_mem += memInfo.totalswap;
-    total_mem *= info.mem_unit;
-    return (unsigned long long)total_mem;
-}
+    FILE *file = fopen("/proc/meminfo", "r");
+    if (NULL == file)
+    {
+        return;
+    }
+    int i = 0;
+    int value;
+    char name[512], line[1024];
+    while (fgets(line, sizeof(line) - 1, file))
+    {
+        if (sscanf(line, "%s%u", name, &value) != 2)
+        {
+            continue;
+        }
+        if (0 == strcmp(name, "MemTotal:"))
+        {
+            ++i;
+            o->total = value;
+        }
+        else if (0 == strcmp(name, "MemFree:"))
+        {
+            ++i;
+            o->free = value;
+        }
+        else if (0 == strcmp(name, "MemAvailable:"))
+        {
+            ++i;
+            o->available = value;
+        }
 
-static unsigned long long get_memory_free()
-{
-    struct sysinfo info;
-    sysinfo(&info);
-    long long freeram = info.freeram * info.mem_unit;
-    return (unsigned long long)freeram;
+        if (i == 3)
+        {
+            break;
+        }
+    }
+    fclose(file);
 }
 
 static unsigned long get_memory_process()
@@ -520,7 +544,6 @@ static void get_cpu_result(proc_t *p, cpu_t *before, cpu_t *after)
         total = 1;
     }
 
-    uint64_t idle = get_cpu_idle(&diff);
     uint64_t user = get_cpu_user(&diff);
     uint64_t system = get_cpu_system(&diff);
 
@@ -576,11 +599,14 @@ void get_proc_info(proc_t *p)
         return;
     }
     get_cpu_result(p, process_ptr->before, process_ptr->after);
+    mem_info_t mem;
+    get_memory_info(&mem);
+
     SWAP(process_ptr->before, process_ptr->after);
     p->pid = pid;
-    p->mem_total = get_memory_total();
-    p->mem_free = get_memory_free();
-    p->percent_mem = (double)(p->mem_total - p->mem_free) / (double)p->mem_total * 100;
+    p->mem_total = mem.total * 1024;
+    p->mem_free = mem.free * 1024;
+    p->percent_mem = (double)(mem.total - mem.available) / (double)mem.total * 100;
     p->percent_mem_process = (double)(get_memory_process()) / (double)p->mem_total * 100;
     p->cpu_count = process_ptr->cpu_count;
 }
